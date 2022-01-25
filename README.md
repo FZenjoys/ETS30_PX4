@@ -19,6 +19,7 @@ PX4 is highly portable, OS-independent and supports Linux, NuttX and QuRT out of
   * [Rover](https://docs.px4.io/master/en/frames_rover/)
   * many more experimental types (Blimps, Boats, Submarines, High altitude balloons, etc)
 * Releases: [Downloads](https://github.com/PX4/PX4-Autopilot/releases)
+* Releasses: [Modification Downloads](https://github.com/FZenjoys/ETS30_PX4/releases)
 
 
 ## Building a PX4 based drone, rover, boat or robot

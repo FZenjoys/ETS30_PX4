@@ -48,7 +48,6 @@
 
 using namespace matrix;
 
-
 VtolType::VtolType(VtolAttitudeControl *att_controller) :
 	_attc(att_controller),
 	_vtol_mode(mode::ROTARY_WING)
@@ -594,6 +593,124 @@ float VtolType::pusher_assist()
 		const Quatf q_sp(Eulerf(_v_att_sp->roll_body, _v_att_sp->pitch_body, euler_sp(2)));
 		q_sp.copyTo(_v_att_sp->q_d);
 	}
+
+	//***Start kernel control algorithm of ETS30mini ***//
+
+	//force
+	_f_x = body_z_sp(0);
+	_f_y = body_z_sp(1);
+	_f_z = body_z_sp(2);
+
+	//moment
+	auto &mc_in = _actuators_mc_in->control;
+	_m_x  = mc_in[actuator_controls_s::INDEX_ROLL] ;
+	_m_y  = mc_in[actuator_controls_s::INDEX_PITCH] ;
+	_m_z  = mc_in[actuator_controls_s::INDEX_YAW] ;
+
+
+	//***transformation matrix calculation***//
+	_E2Broll = euler.phi() ;
+	_E2Bpitch = euler.theta();
+	_E2Byaw = euler.psi() ;
+
+	_matrix30_E2B(0,0) = cos(euler.theta()) * cos(euler.psi()); // 3*3 matrix
+	_matrix30_E2B(0,1) = cos(euler.theta()) * sin(euler.psi());
+	_matrix30_E2B(0,2) = -sin(euler.theta());
+	_matrix30_E2B(1,0) = cos(euler.psi()) * sin(euler.phi()) * sin(euler.theta()) - cos(euler.phi()) * sin(euler.psi());
+	_matrix30_E2B(1,1) = cos(euler.phi()) * cos(euler.psi()) + sin(euler.phi()) * sin(euler.theta()) * sin(euler.psi());
+	_matrix30_E2B(1,2) = cos(euler.theta()) * sin(euler.phi());
+	_matrix30_E2B(2,0) = sin(euler.phi()) * sin(euler.psi()) + cos(euler.phi()) * cos(euler.psi()) * sin(euler.theta());
+	_matrix30_E2B(2,1) = cos(euler.phi()) * sin(euler.theta()) * sin(euler.psi()) - cos(euler.psi()) * sin(euler.phi() );
+	_matrix30_E2B(2,2) = cos(euler.phi()) * cos(euler.theta());
+
+	//***transformation E2B to get f_body and M_body ***//
+	// f_body = matrix_E2B*[fx;fy;fz];
+	// m_body = matrix_E2B*[mx;my;mz];
+	_f_x_body = _matrix30_E2B(0,0) * _f_x + _matrix30_E2B(0,1) * _f_y + _matrix30_E2B(0,2) * _f_z;
+	//_f_y_body = _matrix30_E2B(1,0) * _f_x + _matrix30_E2B(1,1) * _f_y + _matrix30_E2B(1,2) * _f_z;
+	_f_z_body = _matrix30_E2B(2,0) * _f_x + _matrix30_E2B(2,1) * _f_y + _matrix30_E2B(2,2) * _f_z;
+	_m_x_body = _matrix30_E2B(0,0) * _m_x + _matrix30_E2B(0,1) * _m_y + _matrix30_E2B(0,2) * _m_z;
+	_m_y_body = _matrix30_E2B(1,0) * _m_x + _matrix30_E2B(1,1) * _m_y + _matrix30_E2B(1,2) * _m_z;
+	_m_z_body = _matrix30_E2B(2,0) * _m_x + _matrix30_E2B(2,1) * _m_y + _matrix30_E2B(2,2) * _m_z;
+
+	// equilibrium state value
+	_f_1 = _L2 / 2 * sqrt(1 + _L1 * _L1 * _delta * _delta * cos(euler.theta()) * cos(euler.theta()) + _L1 * _delta * sin(2 * euler.theta()));   // Eq(6c)
+	_f_2 = _L2 / 2 * sqrt(1 + _L1 * _L1 * _delta * _delta * cos(euler.theta()) * cos(euler.theta()) + _L1 * _delta * sin(2 * euler.theta()));   // Eq(6c)
+	_f_3 = _L1 * sqrt(1 + _L2 * _L2 * _delta * _delta * cos(euler.theta()) * cos(euler.theta()) - _L2 * _delta * sin(2 * euler.theta()));      // Eq(6d)
+	_theta_1 = atan(tan(euler.theta()) + _L1 * _delta);		// Eq(6a)
+	_theta_2 = atan(tan(euler.theta()) + _L1 * _delta);		// Eq(6a)
+	_theta_3 = atan(tan(euler.theta()) - _L2 * _delta);		// Eq(6b)
+
+	//***Solution matrix definition***//
+	//matrix A
+	_m_8_A.setZero();
+	_m_8_A (0,0) = sin(_theta_1);
+	_m_8_A (0,1) = -_l * cos(_theta_1);
+	_m_8_A (0,2) = -cos(_theta_1);
+	_m_8_A (0,3) = cos(_theta_1);
+	_m_8_A (0,4) = -sin(_theta_1);
+	_m_8_A (1,0) = sin(_theta_2);
+	_m_8_A (1,1) = -_l * cos(_theta_2);
+	_m_8_A (1,2) = cos(_theta_2);
+	_m_8_A (1,3) = cos(_theta_2);
+	_m_8_A (1,4) = sin(_theta_2);
+	_m_8_A (2,0) = 0;
+	_m_8_A (2,1) = -cos(_theta_3);
+	_m_8_A (2,2) = 0;
+	_m_8_A (2,3) = -cos(_theta_3);
+	_m_8_A (2,4) = 0;
+	_m_8_A (3,0) = cos(_theta_1);
+	_m_8_A (3,1) = _l * sin(_theta_1);
+	_m_8_A (3,2) = sin(_theta_1);
+	_m_8_A (3,3) = -sin(_theta_1);
+	_m_8_A (3,4) = -cos(_theta_1);
+	_m_8_A (4,0) = cos(_theta_2);
+	_m_8_A (4,1) = _l * sin(_theta_2);
+	_m_8_A (4,2) = -sin(_theta_2);
+	_m_8_A (4,3) = -sin(_theta_2);
+	_m_8_A (4,4) = cos(_theta_2);
+	_m_8_A (5,0) = 0;
+	_m_8_A (5,1) = sin(_theta_3);
+	_m_8_A (5,2) = 0;
+	_m_8_A (5,3) = sin(_theta_3);
+	_m_8_A (5,4) = 0;
+
+	//matrix state
+	_m_8_state.setZero(); // dynamics matrix
+	_m_8_state(0) = _f_x_body;
+	_m_8_state(1) = _L1 * _f_z_body;
+	_m_8_state(2) = _m_x_body / _L3;
+	_m_8_state(3) = _m_y_body;
+	_m_8_state(4) = _m_z_body / _L3;
+
+	//matrix B
+	_m_8_B.setZero();
+	_m_8_B(0) = -sin(_theta_1);
+	_m_8_B(1) = -sin(_theta_2);
+	_m_8_B(2) = sin(_theta_3);
+	_m_8_B(3) = -cos(_theta_1);
+	_m_8_B(4) = -cos(_theta_2);
+	_m_8_B(5) = cos(_theta_3);
+
+	//***Solution matrix calculation***//
+	//solution = A * state + _epsilon * B
+	_m_8_solusion = _m_8_A * _m_8_state + _epsilon * _m_8_B; // solution, 6*1 vector, Eq(8)
+	_df_1 = _m_8_solusion(0) / 2;
+	_df_2 = _m_8_solusion(1) / 2;
+	_df_3 = _m_8_solusion(2);
+	_dtheta_1 = _m_8_solusion(3) / (2 * _f_1);
+	_dtheta_2 = _m_8_solusion(4) / (2 * _f_2);
+	_dtheta_3 = _m_8_solusion(5) / _f_3;
+
+	//***Update value of f,theta***//
+	_f_1 += _df_1;
+	_f_2 += _df_2;
+	_f_3 += _df_3;
+	_theta_1 += _dtheta_1;
+	_theta_2 += _dtheta_2;
+	_theta_3 += _dtheta_3;
+
+	//***End kernel control algorithm of ETS30mini ***//
 
 	return forward_thrust;
 

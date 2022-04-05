@@ -430,9 +430,17 @@ void Tiltrotor::fill_actuator_outputs()
 	auto &fw_out = _actuators_out_1->control;
 
 	// Multirotor output
-	mc_out[actuator_controls_s::INDEX_ROLL]  = mc_in[actuator_controls_s::INDEX_ROLL]  * _mc_roll_weight;
-	mc_out[actuator_controls_s::INDEX_PITCH] = mc_in[actuator_controls_s::INDEX_PITCH] * _mc_pitch_weight;
-	mc_out[actuator_controls_s::INDEX_YAW]   = mc_in[actuator_controls_s::INDEX_YAW]   * _mc_yaw_weight;
+	mc_out[actuator_controls_s::INDEX_ROLL] = _f_1;
+	mc_out[actuator_controls_s::INDEX_PITCH] = _f_2;
+	mc_out[actuator_controls_s::INDEX_YAW] = _f_3;
+	mc_out[actuator_controls_s::INDEX_FLAPS] = _theta_1;
+	mc_out[actuator_controls_s::INDEX_SPOILERS] = _theta_2;
+	mc_out[actuator_controls_s::INDEX_AIRBRAKES] = _theta_3;
+
+	// Multirotor output
+	//mc_out[actuator_controls_s::INDEX_ROLL]  = mc_in[actuator_controls_s::INDEX_ROLL]  * _mc_roll_weight;
+	//mc_out[actuator_controls_s::INDEX_PITCH] = mc_in[actuator_controls_s::INDEX_PITCH] * _mc_pitch_weight;
+	//mc_out[actuator_controls_s::INDEX_YAW]   = mc_in[actuator_controls_s::INDEX_YAW]   * _mc_yaw_weight;
 
 	if (_vtol_schedule.flight_mode == vtol_mode::FW_MODE) {
 		mc_out[actuator_controls_s::INDEX_THROTTLE] = fw_in[actuator_controls_s::INDEX_THROTTLE];

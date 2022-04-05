@@ -46,6 +46,9 @@
 #include <lib/mathlib/mathlib.h>
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_pwm_output.h>
+#include <matrix/Matrix.hpp> 		//add matrix
+
+using namespace matrix;
 
 struct Params {
 	int32_t idle_pwm_mc;			// pwm value for idle in mc mode
@@ -225,6 +228,63 @@ protected:
 	float _mc_pitch_weight = 1.0f;	// weight for multicopter attitude controller pitch output
 	float _mc_yaw_weight = 1.0f;	// weight for multicopter attitude controller yaw output
 	float _mc_throttle_weight = 1.0f;	// weight for multicopter throttle command. Used to avoid
+
+	//*******ETS30mini parameter definition start ******//
+
+	float _f_x = 0.0f;	//force for x direction  = body_z_sp(0)
+	float _f_y = 0.0f;	//force for y direction  = body_z_sp(1)
+	float _f_z = 0.0f;  	//force for z direction  = body_z_sp(2)
+	float _m_x = 0.0f;  	//moment for x direction  = actuator_roll
+	float _m_y = 0.0f;	//moment for y direction  = actuator_pitch
+	float _m_z = 0.0f;	//moment for z direction  = actuator_yaw
+
+	float _f_x_body;	//force for x direction in body frame
+	float _f_y_body;	//force for y direction in body frame
+	float _f_z_body;	//force for z direction in body frame
+	float _m_x_body;	//moment for x direction in body frame
+	float _m_y_body;	//moment for x direction in body frame
+	float _m_z_body;	//moment for x direction in body frame
+
+	float _df_1;  //the changes in force signal for motor_1
+	float _df_2;  //the changes in force signal for motor_3
+	float _df_3;  //the changes in force signal for motor_3
+	float _dtheta_1;  //the changes in torque signal for servo_1
+	float _dtheta_2;  //the changes in torque signal for servo_2
+	float _dtheta_3;  //the changes in torque signal for servo_3
+
+	float _f_1;  //output force for motor_1
+	float _f_2;  //output force for motor_2
+	float _f_3;  //output force for motor_3
+	float _theta_1;  //output of servo angle _ 1
+	float _theta_2;  //output of servo angle _ 2
+	float _theta_3;  //output of servo angle _ 3
+
+	float _l = 4.0f; //l in matrix_1,l=L2/L1
+	float _L1 = 0.2f; //L1 in matrix_2
+	float _L2 = 0.8f; //L2 in matrix_2
+	float _L3 = 0.5f; //L3 in matrix_2
+	// float _kexi = 0.0f; //coefficient of matrix_3
+	// float _solution[6] = 0.0f;  //solution from matrix
+	// float _matrix30_E2B[3][3] = 0.0f; //transform matrix from inertial to body follow roll, pitch and yaw order
+	// float _matrix30_8_A[6][5] = 0.0f; //matrix_A for dynamic solution
+	// float _matrix30_8_state[5] = 0.0f;//matrix_state for dynamic solution
+	// float _matrix30_8_B[6];		//matrix_B for dynamic solution
+
+	Matrix<float, 3, 3>  _matrix30_E2B; //transformation matrix for E2B
+	float _E2Broll;		//roll angle for E2B
+	float _E2Bpitch;	//pitch angle for E2B
+	float _E2Byaw;		//yaw angle for E2B
+
+	Matrix<float, 6, 5>  _m_8_A;  	// matrix A, 6*5
+	Vector<float, 5>  _m_8_state;	// matrix state, vector 5*1
+	Vector<float, 6>  _m_8_B;	// matrix B, vector 6*1
+	Vector<float, 6>  _m_8_solusion; // matrix solution, vector 6*1
+
+
+	float _delta = 0.0f;   // a free parameter used in the equilibrium solution
+	float _epsilon = 0.0f; // a free parameter used in the general dynamic solution
+
+	//*******ETS30mini parameter definition end ******//
 
 	// motors spinning up or cutting too fast when doing transitions.
 	float _thrust_transition = 0.0f;	// thrust value applied during a front transition (tailsitter & tiltrotor only)
